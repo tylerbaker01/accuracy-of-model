@@ -1,0 +1,183 @@
+---
+title: "621 final"
+author: "Tyler Baker and Jay Lee"
+date: '2022-11-20'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(psych)
+library(ggplot2)
+library(GGally)
+library(pscl)
+library(reshape)
+library(car)
+library(mice)
+library(naniar)
+library(readr)
+library(dplyr)
+library(knitr)
+library(tidyr)
+library(stringr)
+library(extraoperators)
+library(palmerpenguins)
+```
+
+```{r}
+ins_df <- 'https://raw.githubusercontent.com/jayleecunysps/sps621/main/insurance.csv'
+ins_df <-read.csv(ins_df, header=T, stringsAsFactors=T)
+```
+
+We want to check the type each columns.
+
+age: age of primary beneficiary (int)
+
+sex: insurance contractor gender, female, male (Factor)
+
+bmi: Body mass index, providing an understanding of body, weights that are relatively high or low relative to height,
+objective index of body weight (kg / m ^ 2) using the ratio of height to weight, ideally 18.5 to 24.9 (num)
+
+children: Number of children covered by health insurance / Number of dependents (int)
+
+smoker: Smoking (Factor)
+
+region: the beneficiary's residential area in the US, northeast, southeast, southwest, northwest. (Factor)
+
+charges: Individual medical costs billed by health insurance (num)
+```{r}
+dim(ins_df) #check how many obs and var
+str(ins_df) #check the data type
+```
+
+In the summary, we can see the range of charges and bmi is huge, also the amount of smoker and non-smoker has huge gap in between.
+
+```{r}
+summary(ins_df)
+colSums(is.na(ins_df)) #check if there is any missing value
+```
+As we can see, there is a lot of outliner under charges and bmi which support what we saw under summary.
+
+```{r}
+boxplot(ins_df$age,
+data=ins_df,
+main=paste('Box Plot - age'),
+xlab='age')
+boxplot(ins_df$bmi,
+data=ins_df,
+main=paste('Box Plot - bmi'),
+xlab='bmi')
+boxplot(ins_df$children,
+data=ins_df,
+main=paste('Box Plot - children'),
+xlab='children')
+boxplot(ins_df$charges,
+data=ins_df,
+main=paste('Box Plot - charges'),
+xlab='charges')
+```
+As we can see most of the people charges are under 20k.
+```{r}
+ggplot(data = ins_df, aes(x = charges)) + 
+  geom_density() + 
+  ggtitle("Distribution of Charges")
+```
+sex and region do not have big differences while smoke drive the differences a lot.
+
+```{r}
+ggplot(data=ins_df, aes(x=sex, y=charges, fill=sex)) +
+geom_bar(stat="identity", position=position_dodge())
+ggplot(data=ins_df, aes(x=smoker, y=charges, fill=sex)) +
+geom_bar(stat="identity", position=position_dodge())
+ggplot(data=ins_df, aes(x=region, y=charges, fill=sex)) +
+geom_bar(stat="identity", position=position_dodge())
+```
+We would like the see the distribution again with "fill = smoker" since we notied see the noticeable differences.
+Now we can see smoker pay much more charges then non-smoker.
+
+```{r}
+ggplot(data = ins_df, aes(x = charges,fill = smoker)) + 
+  geom_density() + 
+  ggtitle("Distribution of Charges")
+```
+
+then we want to see scatterplot with fitted regression line, the bmi one catch our attention.
+
+```{r}
+ggplot(ins_df, aes(x = age, y = charges, fill=smoker)) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+ggplot(ins_df, aes(x = bmi, y = charges, fill=smoker)) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+ggplot(ins_df, aes(x = children, y = charges, fill=smoker)) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+```
+
+```{r}
+model1 <- lm(ins_df$charges~ins_df$bmi)
+summary(model1)
+plot(ins_df$bmi, ins_df$charges, main = "Height vs Weight
+                 Regression model")
+abline(lm(ins_df$charges~ins_df$bmi))
+```
+
+```{r}
+model2 <- lm(charges~bmi + age +children +region,
+            data = ins_df)
+summary(model2)
+summary(model2)$coefficient
+```
+
+the t value of children and region is closest to zero, so we decide to elimit children and create model3.
+
+model equation is charges = -6424.80 + 332.97 * bmi + 241.93 * age
+```{r}
+model3 <- lm(charges~bmi + age +children,
+            data = ins_df)
+summary(model3)
+summary(model3)$coefficient
+```
+
+```{r}
+model3v2 <- lm(charges~bmi + age,
+            data = ins_df)
+summary(model3v2)
+summary(model3v2)$coefficient
+```
+
+
+
+```{r}
+set.seed((1212))
+
+partition <- sample(1:nrow(ins_df), size=nrow(ins_df)*0.7,replace=FALSE)
+
+train.data <-ins_df[partition, ]
+test.data <- ins_df[-partition, ]
+
+target <- test.data$charges
+test.data <- test.data[, c("age", "sex", "bmi", "children", "smoker", "region")]
+
+model4 <- glm(charges ~.,family = gaussian(link="identity"),data=train.data)
+
+predictions <- as.data.frame(predict(model4, newdata = test.data))
+accuracy_df <- target
+
+accuracy_df<- merge(accuracy_df, predictions)
+
+accuracy_df$error <- abs(accuracy_df$x - accuracy_df$`predict(model4, newdata = test.data)`)
+accuracy_df$percentage_error <- ((accuracy_df$`predict(model4, newdata = test.data)` - accuracy_df$x)/accuracy_df$x) * 100
+avg_error <- mean(accuracy_df$error)
+avg_percentage_error <- mean(accuracy_df$percentage_error)
+print(avg_percentage_error)
+print(avg_error)
+summary(model4)
+```
+
+
+
